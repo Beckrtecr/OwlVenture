@@ -1,0 +1,47 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #1a1a1a;
+    overflow: hidden; /* Prevent scrollbars */
+    font-family: 'Courier New', Courier, monospace;
+}
+
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#instructions {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    border: 2px solid #4a4a4a;
+    pointer-events: none; /* Let clicks pass through to game */
+    opacity: 0.8;
+    transition: opacity 0.5s;
+    font-size: 14px;
+}
+
+#instructions:hover {
+    opacity: 1;
+}
+
+#instructions h3 {
+    margin-top: 0;
+    color: #ffd700;
+    text-transform: uppercase;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+canvas {
+    display: block; /* Removes bottom margin on canvas */
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
