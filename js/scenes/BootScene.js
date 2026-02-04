@@ -14,7 +14,7 @@ class BootScene extends Phaser.Scene {
     create() {
         this.createProceduralTextures();
         this.createAnimations();
-        
+
         // Start the game
         this.scene.start('GameScene');
         this.scene.start('UIScene');
@@ -58,17 +58,42 @@ class BootScene extends Phaser.Scene {
         graphics.generateTexture('tree', 32, 32);
         graphics.clear();
 
-        // 5. Enemy (Slime)
-        graphics.fillStyle(0x9c27b0); // Purple
-        graphics.fillCircle(16, 16, 14);
-        graphics.fillStyle(0xffffff); // Eyes
-        graphics.fillCircle(12, 12, 4);
-        graphics.fillCircle(20, 12, 4);
-        graphics.fillStyle(0x000000); // Pupils
-        graphics.fillCircle(12, 12, 1);
-        graphics.fillCircle(20, 12, 1);
-        graphics.generateTexture('enemy', 32, 32);
-        graphics.clear();
+        // 5. Goblin Variants
+        const goblinColors = [
+            { name: 'goblin_red', color: 0xff0000 },
+            { name: 'goblin_blue', color: 0x0000ff },
+            { name: 'goblin_green', color: 0x00ff00 },
+            { name: 'goblin_white', color: 0xffffff },
+            { name: 'goblin_gold', color: 0xffd700 }
+        ];
+
+        goblinColors.forEach(goblin => {
+            graphics.fillStyle(goblin.color);
+            graphics.fillCircle(16, 16, 14); // Body
+            graphics.fillStyle(0x000000); // Outline semblance
+            graphics.lineStyle(2, 0x000000);
+            graphics.strokeCircle(16, 16, 14);
+
+            // Eyes
+            graphics.fillStyle(0xffffff);
+            graphics.fillCircle(12, 12, 4);
+            graphics.fillCircle(20, 12, 4);
+            graphics.fillStyle(0x000000); // Pupils
+            graphics.fillCircle(12, 12, 1);
+            graphics.fillCircle(20, 12, 1);
+
+            // Mouth/Teeth (Goblinish)
+            graphics.beginPath();
+            graphics.moveTo(10, 20);
+            graphics.lineTo(22, 20);
+            graphics.lineTo(16, 25);
+            graphics.closePath();
+            graphics.fillStyle(0x000000);
+            graphics.fillPath();
+
+            graphics.generateTexture(goblin.name, 32, 32);
+            graphics.clear();
+        });
 
         // 6. Projectile (Beak shot)
         graphics.fillStyle(0xffd700); // Gold
@@ -82,6 +107,14 @@ class BootScene extends Phaser.Scene {
         graphics.arc(16, 16, 20, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(90), false);
         graphics.strokePath();
         graphics.generateTexture('slash', 32, 32);
+        graphics.clear();
+
+        // 8. Inventory Icon (Cloth)
+        graphics.fillStyle(0x888888);
+        graphics.fillRect(0, 0, 32, 32);
+        graphics.fillStyle(0xffffff);
+        graphics.font = "20px Arial";
+        graphics.generateTexture('icon_cloth', 32, 32);
         graphics.clear();
     }
 
@@ -108,4 +141,13 @@ class BootScene extends Phaser.Scene {
             });
         }
     }
+
+    create() {
+        this.createProceduralTextures();
+        this.createAnimations();
+
+        // Start the Menu
+        this.scene.start('MenuScene');
+    }
 }
+

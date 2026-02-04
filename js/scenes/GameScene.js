@@ -9,19 +9,16 @@ class GameScene extends Phaser.Scene {
         this.mapHeight = 3200;
         this.physics.world.setBounds(0, 0, this.mapWidth, this.mapHeight);
 
-        // --- LAYER 1: Parallax Background (The "Deep" bottom) ---
-        // We create a tileSprite that covers the camera view and scrolls slowly
+        // --- LAYER 1: Parallax Background ---
         this.bgDeep = this.add.tileSprite(0, 0, this.cameras.main.width, this.cameras.main.height, 'water')
             .setOrigin(0, 0)
             .setScrollFactor(0);
 
         // --- LAYER 2: The World (Ground) ---
-        // Using a group for ground tiles for simply generating a world
         this.groundGroup = this.add.group();
         this.generateWorld();
 
         // --- LAYER 3: Objects (Trees, Enemies, Player) ---
-        // We use depth sorting for 3D effect
 
         // Player Setup
         this.player = this.physics.add.sprite(400, 300, 'owl');
@@ -29,8 +26,10 @@ class GameScene extends Phaser.Scene {
         this.player.zHeight = 0; // Custom Z altitude
         this.player.zVelocity = 0;
         this.player.isFlying = false;
+        // Default cloth color (white tint means normal)
+        this.player.setTint(0xffffff);
 
-        // Player Shadow (for depth reference)
+        // Player Shadow
         this.playerShadow = this.add.ellipse(400, 300, 20, 10, 0x000000, 0.5);
 
         // Camera Follow
@@ -46,22 +45,25 @@ class GameScene extends Phaser.Scene {
             left: Phaser.Input.Keyboard.KeyCodes.A,
             right: Phaser.Input.Keyboard.KeyCodes.D,
             dash: Phaser.Input.Keyboard.KeyCodes.SHIFT,
-            fly: Phaser.Input.Keyboard.KeyCodes.SPACE
+            fly: Phaser.Input.Keyboard.KeyCodes.SPACE,
+            inventory: Phaser.Input.Keyboard.KeyCodes.E
         });
 
         // Enemies
         this.enemies = this.physics.add.group();
-        this.spawnEnemies(20);
+        this.spawnEnemies();
 
         // Projectiles
         this.projectiles = this.physics.add.group();
         this.input.on('pointerdown', (pointer) => {
-            this.shoot(pointer);
+            if (!this.inventoryVisible) {
+                this.shoot(pointer);
+            }
         });
 
-        // Clouds (Parallax High Layer)
+        // Clouds
         this.clouds = this.add.group();
-        this.createClouds(15);
+        this.createClouds(20);
 
         // UI Data
         this.playerStats = {
@@ -74,60 +76,165 @@ class GameScene extends Phaser.Scene {
         // Collisions
         this.physics.add.collider(this.player, this.enemies, this.hitEnemy, null, this);
         this.physics.add.overlap(this.projectiles, this.enemies, this.hitEnemyProjectile, null, this);
+        this.physics.add.collider(this.player, this.trees);
+
+        // Inventory UI
+        this.createInventory();
     }
 
     generateWorld() {
-        // Simple procedural generation
-        // Fill base with grass
+        // More detailed procedural generation
+        // Base grass everywhere
         for (let x = 0; x < this.mapWidth; x += 32) {
             for (let y = 0; y < this.mapHeight; y += 32) {
-                // Randomly choose texture variants if we had them, defaulting to grass
-                if (Math.random() < 0.1) {
-                    this.add.image(x, y, 'dirt').setOrigin(0);
-                } else {
-                    this.add.image(x, y, 'grass').setOrigin(0);
-                }
+                this.add.image(x, y, 'grass').setOrigin(0);
             }
         }
 
-        // Add Trees as obstacles
+        // Generate features: Forests, Dirt Patches, Lakes
         this.trees = this.physics.add.staticGroup();
-        for (let i = 0; i < 300; i++) {
-            const x = Phaser.Math.Between(0, this.mapWidth);
-            const y = Phaser.Math.Between(0, this.mapHeight);
-            const tree = this.trees.create(x, y, 'tree');
-            tree.setDepth(y); // Basic depth sort based on Y
+
+        // Perlin-ish noise simulation for biomes (simple clustering)
+        const gridSize = 100; // chunks
+        for (let x = 0; x < this.mapWidth; x += gridSize) {
+            for (let y = 0; y < this.mapHeight; y += gridSize) {
+                const rand = Math.random();
+
+                // 10% Chance of Water Lake
+                if (rand < 0.1) {
+                    this.createLake(x, y);
+                }
+                // 30% Chance of Dense Forest
+                else if (rand < 0.4) {
+                    this.createForest(x, y);
+                }
+                // 10% Chance of Dirt Patch
+                else if (rand < 0.5) {
+                    this.createDirtPatch(x, y);
+                }
+                // Scattered trees elsewhere
+                else if (Math.random() < 0.3) {
+                    const tree = this.trees.create(x + Phaser.Math.Between(0, 50), y + Phaser.Math.Between(0, 50), 'tree');
+                    tree.setDepth(tree.y);
+                }
+            }
+        }
+    }
+
+    createLake(startX, startY) {
+        // Blobs of water
+        for (let i = 0; i < 5; i++) {
+            // Just visual water tiles on top of grass
+            const wx = startX + Phaser.Math.Between(-50, 50);
+            const wy = startY + Phaser.Math.Between(-50, 50);
+            this.add.image(wx, wy, 'water').setOrigin(0).setDepth(1);
+        }
+    }
+
+    createForest(startX, startY) {
+        for (let i = 0; i < 8; i++) {
+            const tx = startX + Phaser.Math.Between(0, 100);
+            const ty = startY + Phaser.Math.Between(0, 100);
+            const tree = this.trees.create(tx, ty, 'tree');
+            tree.setDepth(ty);
             tree.refreshBody();
         }
+    }
 
-        this.physics.add.collider(this.player, this.trees);
+    createDirtPatch(startX, startY) {
+        for (let i = 0; i < 5; i++) {
+            const dx = startX + Phaser.Math.Between(0, 80);
+            const dy = startY + Phaser.Math.Between(0, 80);
+            this.add.image(dx, dy, 'dirt').setOrigin(0);
+        }
     }
 
     createClouds(count) {
         for (let i = 0; i < count; i++) {
             const x = Phaser.Math.Between(0, this.mapWidth);
             const y = Phaser.Math.Between(0, this.mapHeight);
-            // Using 'water' as simpler cloud placeholder, tint it white/grey
             const cloud = this.add.image(x, y, 'water').setScale(3).setAlpha(0.3);
-            cloud.setScrollFactor(1.2); // Moves faster = closer
-            cloud.setDepth(9999); // Always on top
+            cloud.setScrollFactor(1.2);
+            cloud.setDepth(9999);
             this.clouds.add(cloud);
         }
     }
 
-    spawnEnemies(count) {
-        for (let i = 0; i < count; i++) {
-            const x = Phaser.Math.Between(100, this.mapWidth);
-            const y = Phaser.Math.Between(100, this.mapHeight);
-            const enemy = this.enemies.create(x, y, 'enemy');
-            enemy.setBounce(1);
-            enemy.setCollideWorldBounds(true);
-            enemy.setVelocity(Phaser.Math.Between(-50, 50), Phaser.Math.Between(-50, 50));
-            enemy.hp = 3;
-        }
+    spawnEnemies() {
+        // 5 Types: Red, Blue, Green, White, Gold
+        // Hierarchy: Red < Blue < Green < White < Gold
+        const enemyTypes = [
+            { key: 'goblin_red', hp: 20, speed: 30, damage: 5, color: 0xff0000, count: 15 },
+            { key: 'goblin_blue', hp: 40, speed: 45, damage: 10, color: 0x0000ff, count: 10 },
+            { key: 'goblin_green', hp: 60, speed: 60, damage: 15, color: 0x00ff00, count: 8 },
+            { key: 'goblin_white', hp: 100, speed: 80, damage: 20, color: 0xffffff, count: 5 },
+            { key: 'goblin_gold', hp: 200, speed: 100, damage: 50, color: 0xffd700, count: 2 } // Rare bosses
+        ];
+
+        enemyTypes.forEach(type => {
+            for (let i = 0; i < type.count; i++) {
+                const x = Phaser.Math.Between(100, this.mapWidth);
+                const y = Phaser.Math.Between(100, this.mapHeight);
+                const enemy = this.enemies.create(x, y, type.key); // Using generated texture keys
+                enemy.setBounce(1);
+                enemy.setCollideWorldBounds(true);
+                enemy.setVelocity(Phaser.Math.Between(-type.speed, type.speed), Phaser.Math.Between(-type.speed, type.speed));
+
+                // Store stats on the object
+                enemy.stats = { ...type };
+                enemy.currentHp = type.hp;
+            }
+        });
+    }
+
+    createInventory() {
+        this.inventoryVisible = false;
+        this.inventoryContainer = this.add.container(0, 0).setScrollFactor(0).setDepth(20000).setVisible(false);
+
+        // Background
+        const bg = this.add.rectangle(400, 300, 600, 400, 0x222222, 0.9).setStrokeStyle(4, 0x888888);
+        const title = this.add.text(400, 150, 'INVENTORY', { fontSize: '32px', color: '#ffffff' }).setOrigin(0.5);
+
+        // Cloth Slots (Change colors)
+        const instructions = this.add.text(400, 200, 'Equip Cloth Color', { fontSize: '18px', color: '#aaaaaa' }).setOrigin(0.5);
+
+        const colors = [0xffffff, 0xff0000, 0x0000ff, 0x00ff00, 0xffff00, 0x00ffff, 0xff00ff];
+        let startX = 200;
+
+        colors.forEach((color, index) => {
+            const slotContainer = this.add.container(startX + (index * 60), 250);
+            const slotBg = this.add.rectangle(0, 0, 40, 40, 0x444444).setInteractive();
+            const colorSwatch = this.add.rectangle(0, 0, 30, 30, color);
+
+            slotBg.on('pointerdown', () => {
+                this.player.setTint(color);
+                this.add.text(400, 350, 'Equipped!', { fontSize: '20px', color: '#ffff00' })
+                    .setOrigin(0.5)
+                    .setAlpha(1)
+                    .setDepth(20001);
+            });
+
+            slotContainer.add([slotBg, colorSwatch]);
+            this.inventoryContainer.add(slotContainer);
+        });
+
+        // Add Armor/Weapon placeholders (just text for now as requested "equip weapons, put on armor")
+        const weaponText = this.add.text(400, 320, 'Weapons: Talon Sword (Equipped)', { fontSize: '16px' }).setOrigin(0.5);
+        const armorText = this.add.text(400, 350, 'Armor: Feathers (Equipped)', { fontSize: '16px' }).setOrigin(0.5);
+
+        this.inventoryContainer.add([bg, title, instructions, weaponText, armorText]);
     }
 
     update() {
+        // Toggle Inventory
+        if (Phaser.Input.Keyboard.JustDown(this.wasd.inventory)) {
+            this.inventoryVisible = !this.inventoryVisible;
+            this.inventoryContainer.setVisible(this.inventoryVisible);
+        }
+
+        // If inventory is open, pause movement
+        if (this.inventoryVisible) return;
+
         // Player Movement
         const speed = 160;
         const speedMult = this.wasd.dash.isDown ? 2 : 1;
@@ -156,9 +263,8 @@ class GameScene extends Phaser.Scene {
             this.player.anims.play('idle', true);
         }
 
-        // Fake Z-Axis / Flight Logic
+        // Fly
         if (Phaser.Input.Keyboard.JustDown(this.wasd.fly)) {
-            // Flap wings, gain height
             this.player.zVelocity = 5;
             this.player.isFlying = true;
         }
@@ -167,8 +273,6 @@ class GameScene extends Phaser.Scene {
         if (this.player.isFlying) {
             this.player.zHeight += this.player.zVelocity;
             this.player.zVelocity -= 0.2; // Gravity
-
-            // Landing
             if (this.player.zHeight <= 0) {
                 this.player.zHeight = 0;
                 this.player.zVelocity = 0;
@@ -176,32 +280,13 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Visual Update for Z-Axis
-        // The shadow stays on the ground (y), the sprite floats up (y - z)
+        // Shadows & Scale
         this.playerShadow.x = this.player.x;
-        this.playerShadow.y = this.player.y + 16; // Offset to feet
-        this.playerShadow.setScale(1 - (this.player.zHeight / 100)); // Shadow shrinks as you fly higher
-
-        // Sprite Offset: We actually move the sprite body for physics, but visually we might want to offset
-        // However, in top-down, usually Y is Y. 
-        // To make it look like flight, we can offset the display origin or use a container.
-        // Simple hack: Just move the sprite up by zHeight visually?
-        // No, that messes up physics. 
-        // Better: Physics Body stays on ground (shadow position). Sprite is a separate object or we just adjust loop.
-        // For this simple demo: We will just scale the player up slightly to simulate "closer to camera" when high
-        // and add a Y offset to the texture rendering if possible, but pure sprite offset is easier.
-        // Let's just offset the Y position of the sprite relative to the body?
-        // Phaser physics body offset is static.
-        // Let's just do: Visual Sprite is separate from Physics Body?
-        // Or simpler: The player IS the shadow collision box. The OWL is a child image.
-
-        // For now, let's just make the sprite bigger when flying to simulate 3D pop
-        const scaleBase = 1;
-        this.player.setScale(scaleBase + (this.player.zHeight / 50));
+        this.playerShadow.y = this.player.y + 16;
+        this.playerShadow.setScale(1 - (this.player.zHeight / 100));
+        this.player.setScale(1 + (this.player.zHeight / 50));
 
         // Depth Sorting
-        // Objects lower on screen (higher Y) are in front
-        // Unless we are flying high, then we are above everything.
         if (this.player.zHeight > 20) {
             this.player.setDepth(9999);
         } else {
@@ -211,50 +296,62 @@ class GameScene extends Phaser.Scene {
         // Update enemies
         this.enemies.getChildren().forEach(enemy => {
             enemy.setDepth(enemy.y);
-            // Simple chase AI
-            if (Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) < 200) {
-                this.physics.moveToObject(enemy, this.player, 50);
+            // Chase AI
+            if (Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) < 300) {
+                this.physics.moveToObject(enemy, this.player, enemy.stats.speed);
             }
         });
 
-        // Update Clouds (Parallax)
+        // Update Clouds
         this.clouds.getChildren().forEach(cloud => {
             cloud.x += 0.5;
             if (cloud.x > this.mapWidth) cloud.x = -100;
         });
 
-        // Update UI
         this.events.emit('updateUI', this.playerStats);
     }
 
     shoot(pointer) {
-        // Calculate velocity vector
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.worldX, pointer.worldY);
         const proj = this.projectiles.create(this.player.x, this.player.y, 'projectile');
         proj.setVelocity(Math.cos(angle) * 400, Math.sin(angle) * 400);
         proj.rotation = angle;
-        // Destroy after 2 seconds
         this.time.delayedCall(2000, () => proj.destroy());
     }
 
     hitEnemy(player, enemy) {
         // Take damage
-        this.cameras.main.shake(100, 0.01);
-        this.playerStats.hp -= 10;
-        enemy.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(-100, 100)); // Knockback
-        if (this.playerStats.hp <= 0) {
-            this.scene.restart(); // Simple respawn
+        if (!this.player.isFlying || this.player.zHeight < 10) { // Can fly over enemies
+            this.cameras.main.shake(100, 0.01);
+            this.playerStats.hp -= enemy.stats.damage;
+
+            // Knockback
+            const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+            player.setVelocity(Math.cos(angle) * 200, Math.sin(angle) * 200);
+
+            if (this.playerStats.hp <= 0) {
+                this.scene.restart();
+            }
         }
     }
 
     hitEnemyProjectile(projectile, enemy) {
         projectile.destroy();
-        enemy.hp--;
-        enemy.setTint(0xff0000);
-        this.time.delayedCall(100, () => enemy.clearTint());
+        enemy.currentHp -= 10; // Player damage
+        enemy.setTint(0xffffff); // Flash white
+        this.time.delayedCall(50, () => enemy.clearTint()); // Reset tint
 
-        if (enemy.hp <= 0) {
-            // Particle explosion (simple)
+        // Create random blink effect
+        this.add.image(enemy.x, enemy.y, 'slash').setDepth(9999).play('attack').destroy(); // If we had anim, just show sprite
+        const slash = this.add.image(enemy.x, enemy.y, 'slash');
+        this.tweens.add({
+            targets: slash,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => slash.destroy()
+        });
+
+        if (enemy.currentHp <= 0) {
             this.createExplosion(enemy.x, enemy.y);
             enemy.destroy();
         }
